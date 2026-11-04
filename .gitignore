@@ -1,0 +1,11 @@
+#built app, upload DirectMessenger.zip to GitHub Releases instead
+release/
+
+#PyInstaller leftovers, if it's ever run by hand in this folder
+build/
+dist/
+*.spec
+
+#python cache files
+__pycache__/
+*.pyc

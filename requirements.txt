@@ -1,0 +1,5 @@
+#exact versions, so every build uses the same tested libraries
+pystray==0.19.5
+Pillow==13.0.0
+cryptography==50.0.2
+pyinstaller==6.22.3

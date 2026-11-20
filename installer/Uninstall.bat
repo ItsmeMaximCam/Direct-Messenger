@@ -4,6 +4,12 @@ rem  Uninstall.bat - removes Direct Messenger installed by Install.bat.
 rem  Also runs from Settings > Apps > Direct Messenger > Uninstall.
 rem ------------------------------------------------------------------
 setlocal
+rem Without LOCALAPPDATA the folder below would point somewhere else entirely,
+rem and this script deletes it, so stop.
+if not defined LOCALAPPDATA (
+    echo Can't find your AppData folder, nothing was removed.
+    exit /b 1
+)
 set "APP_DIR=%LOCALAPPDATA%\Programs\Direct Messenger"
 set "UNINSTALL_KEY=HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\DirectMessenger"
 

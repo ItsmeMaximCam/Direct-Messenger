@@ -9,6 +9,10 @@ rem  Settings > Apps so it can be uninstalled like any other program.
 rem  Running it again updates an existing install.
 rem ------------------------------------------------------------------
 setlocal
+if not defined LOCALAPPDATA (
+    echo Can't find your AppData folder, so there's nowhere to install to.
+    goto :failed
+)
 set "APP_DIR=%LOCALAPPDATA%\Programs\Direct Messenger"
 set "UNINSTALL_KEY=HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\DirectMessenger"
 

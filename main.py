@@ -12,9 +12,17 @@ from gui import ChatWindow
 from images import resource_path
 
 
+def port_number(text):
+    #only allows real port numbers, anything else used to crash the app on start
+    port = int(text)
+    if not 1 <= port <= 65535:
+        raise argparse.ArgumentTypeError("port must be between 1 and 65535")
+    return port
+
+
 def main():
     parser = argparse.ArgumentParser(description="A tiny LAN chat")
-    parser.add_argument("--port", type=int, default=network.DEFAULT_PORT,
+    parser.add_argument("--port", type=port_number, default=network.DEFAULT_PORT,
                         help="TCP port to listen on (default 5050)")
     args = parser.parse_args()
 

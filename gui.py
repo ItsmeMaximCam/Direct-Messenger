@@ -69,10 +69,10 @@ class ChatWindow:
         self.on_exit = None
 
         #info about the person we're talking to
-        self.peer_ip = ""
         self.peer_name = ""
         self.peer_colour = DEFAULT_PEER_COLOUR
         self.peer_profile_received = False
+        self.peer_colours = set()
 
         self.typing_hide_job = None
         self.shaking = False
@@ -205,7 +205,7 @@ class ChatWindow:
         self.messenger.connect(host, port)
 
     def on_send_clicked(self):
-        text = self.message_entry.get().strip()
+        text = network.clean_text(self.message_entry.get())
         if not text:
             return
         incognito = self.incognito.get()
@@ -289,11 +289,12 @@ class ChatWindow:
         #"withdrawn" = hidden to tray, "iconic" = minimised to the taskbar
         return self.root.state() in ("withdrawn", "iconic")
 
-    def show(self):
+    def show(self, take_focus=True):
         self.root.deiconify()
         self.root.lift()
-        self.root.focus_force()
-        self.message_entry.focus_set()
+        if take_focus:
+            self.root.focus_force()
+            self.message_entry.focus_set()
 
     def hide(self):
         self.root.withdraw()
@@ -309,7 +310,8 @@ class ChatWindow:
         if not self._ready("nudge received", NUDGE_COOLDOWN):
             return
         self.add_line("system", f"{self.peer_name} sent you a nudge!")
-        self.show()
+        #pop up but DON'T grab the keyboard. otherwise if you were typing somewhere
+        self.show(take_focus=False)
         #being "topmost" for a moment makes sure it shows over other windows
         self.root.attributes("-topmost", True)
         self.root.after(800, lambda: self.root.attributes("-topmost", False))
@@ -474,7 +476,6 @@ class ChatWindow:
 
     def on_connected(self, peer_ip):
         #until the peer sends their profile, show their IP in the default colour
-        self.peer_ip = peer_ip
         self.peer_name = peer_ip
         self.peer_colour = DEFAULT_PEER_COLOUR
         self.peer_profile_received = False
@@ -498,6 +499,7 @@ class ChatWindow:
         self.peer_name = name
         #each new colour makes a new icon, so a peer flipping colours nonstop
         #could eat memory. after MAX_PEER_COLOURS, new colours are ignored
-        if colour in self.icon_cache or len(self.icon_cache) < MAX_PEER_COLOURS:
+        if colour in self.peer_colours or len(self.peer_colours) < MAX_PEER_COLOURS:
+            self.peer_colours.add(colour)
             self.peer_colour = colour
         self._set_status("Connected", f"{name} (encrypted)")

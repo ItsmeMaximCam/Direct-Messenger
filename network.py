@@ -57,6 +57,8 @@ POLL_TIMEOUT = 0.5                #how often blocking loops check if they should
 #a normal chat sends a few messages a second at most. anyone sending more than
 #this is flooding us (e.g. a hacked app trying to freeze ours), so we hang up
 MAX_FRAMES_PER_SECOND = 30
+REJECT_NOTICE_COOLDOWN = 5.0      #seconds between "Rejected a connection" lines
+REJECT_TIME_LIMIT = 1.0           #most time spent turning away one extra caller
 #shown when the other side doesn't speak the encrypted protocol
 OLD_VERSION_REASON = ("The other person's app couldn't set up an encrypted connection "
                       "(are they using an older version?). Disconnected.")
@@ -71,11 +73,11 @@ class Messenger:
         self.running = False
         self.server_socket = None
         self.peer_socket = None
-        self.peer_name = ""
         self.connecting = False
+        self.last_reject_notice = float("-inf")     #see _listen_loop
         #the encryption keys + counters for the current peer (None until the handshake is done)
         self.channel = None
-        #The lock protects peer_socket, peer_name, connecting and channel, because several threads read and change them.
+        #The lock protects peer_socket, connecting and channel, because several threads read and change them.
         self.lock = threading.Lock()
         #only one message may be encrypted+sent at a time, so the message counter
         #order always matches the order the messages go out on the network
@@ -122,7 +124,6 @@ class Messenger:
             _close_socket(self.server_socket)
             self.server_socket = None
 
-
     def _listen_loop(self):
         #accept incoming connections in a background thread
         while self.running:
@@ -138,12 +139,16 @@ class Messenger:
                 busy = self.peer_socket is not None or self.connecting
                 if not busy:
                     self.peer_socket = client
-                    self.peer_name = peer_name
 
             if busy:
                 _reject_connection(client)
-                self._post("info", f"Rejected a connection from {peer_name} "
-                                   "(already in a conversation).")
+                #only say so every few seconds, so someone connecting over and
+                #over can't fill the chat log
+                now = time.monotonic()
+                if now - self.last_reject_notice >= REJECT_NOTICE_COOLDOWN:
+                    self.last_reject_notice = now
+                    self._post("info", f"Rejected a connection from {peer_name} "
+                                       "(already in a conversation).")
             else:
                 self._start_handshake(client, peer_name)
 
@@ -173,7 +178,6 @@ class Messenger:
             keep = self.running and self.peer_socket is None
             if keep:
                 self.peer_socket = sock
-                self.peer_name = host
 
         if keep:
             self._start_handshake(sock, host)
@@ -291,9 +295,6 @@ class Messenger:
         #process one decrypted message from the peer
         if line in SIGNAL_EVENTS:
             self._post(SIGNAL_EVENTS[line])
-            return
-        if len(line) > MAX_LINE_BYTES:
-            self._post("error", "Ignored an oversized message from the peer.")
             return
         try:
             text = line.decode("utf-8")
@@ -443,7 +444,7 @@ def split_frames(buffer):
 
 
 def parse_address(address_text, default_port=DEFAULT_PORT):
-#parses IP address into (host, port)
+    #parses IP address into (host, port)
     address_text = address_text.strip()
     if not address_text:
         return None
@@ -459,16 +460,20 @@ def parse_address(address_text, default_port=DEFAULT_PORT):
 
 
 def _reject_connection(client):
+    #tells an extra caller we're busy, then hangs up.
+    #gives up after REJECT_TIME_LIMIT in total, so someone sending a byte at a
+    #time can't keep the listener stuck here (nobody else could connect)
+    deadline = time.monotonic() + REJECT_TIME_LIMIT
     try:
-        client.settimeout(1.0)
+        client.settimeout(0.2)
         client.sendall(make_frame(BUSY_LINE))
         client.shutdown(socket.SHUT_WR)       #tell them we're done sending
         #read and throw away what they already sent (their public key). closing with
         #unread data makes windows reset the connection, and the BUSY could get lost
-        while client.recv(1024):
+        while time.monotonic() < deadline and client.recv(1024):
             pass
     except OSError:
-        pass                      #includes timing out after 1 second
+        pass                      #includes timing out
     _close_socket(client)
 
 
